@@ -100,6 +100,7 @@ function DashboardContent() {
     }));
     setSaisies(initialSaisies);
 
+    // Initialiser UNIQUEMENT les détails des KPI qui en ont besoin
     setDetails({
       rdv_pris: [],
       rdv_faits: [],
@@ -170,6 +171,19 @@ function DashboardContent() {
   };
 
   const handleSave = async () => {
+    // Validation : Vérifier que TOUS les KPI avec objectif sont remplis
+    const kpisObligatoires = KPI_LIST.filter(kpi => kpi.hasObjectif && !kpi.calcule);
+    const kpisManquants = kpisObligatoires.filter(kpi => {
+      const saisie = saisies.find(s => s.kpi === kpi.code);
+      return saisie?.valeur === null || saisie?.valeur === undefined;
+    });
+
+    if (kpisManquants.length > 0) {
+      const listeManquants = kpisManquants.map(kpi => `• ${kpi.libelle}`).join('\n');
+      alert(`❌ Veuillez remplir TOUS les KPI avant d'enregistrer :\n\n${listeManquants}\n\nTous les champs doivent être remplis pour valider votre semaine.`);
+      return;
+    }
+
     try {
       // Construire les données au format API
       const kpiData: any = {
@@ -185,9 +199,32 @@ function DashboardContent() {
         kpiData[saisie.kpi] = saisie.valeur;
       });
 
-      // Ajouter les détails en JSON
-      if (Object.keys(details).length > 0) {
-        kpiData.details_json = JSON.stringify(details);
+      // Ajouter les détails en JSON (uniquement pour les KPI qui en ont besoin ET qui ont une valeur > 0)
+      const kpisAvecDetails = ['rdv_pris', 'rdv_faits', 'rdv_df', 'prez', 'ref', 'besoins', 'signatures'];
+      const detailsFiltres: Record<string, any[]> = {};
+
+      kpisAvecDetails.forEach(kpiCode => {
+        const saisieKpi = saisies.find(s => s.kpi === kpiCode);
+        const valeur = saisieKpi?.valeur ?? 0;
+
+        // Ne garder les détails QUE si :
+        // 1. Le KPI a une valeur > 0
+        // 2. Il y a des détails non vides (au moins un champ rempli)
+        if (valeur > 0 && details[kpiCode] && details[kpiCode].length > 0) {
+          // Filtrer les détails pour ne garder que ceux qui ont au moins un champ rempli
+          const detailsNonVides = details[kpiCode].filter(detail => {
+            const { id, ...fields } = detail;
+            return Object.values(fields).some(value => value && value.trim() !== '');
+          });
+
+          if (detailsNonVides.length > 0) {
+            detailsFiltres[kpiCode] = detailsNonVides;
+          }
+        }
+      });
+
+      if (Object.keys(detailsFiltres).length > 0) {
+        kpiData.details_json = JSON.stringify(detailsFiltres);
       }
 
       // Appeler l'API pour enregistrer

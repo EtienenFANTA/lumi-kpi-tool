@@ -14,6 +14,9 @@ interface KPIDetailsProps {
 export default function KPIDetails({ kpiCode, count, details, onChange }: KPIDetailsProps) {
   // Ajuster automatiquement le nombre de détails selon le count
   useEffect(() => {
+    // Ne rien faire si déjà à la bonne taille (évite les boucles infinies)
+    if (details.length === count) return;
+
     if (count === 0) {
       // Si count = 0, vider les détails
       if (details.length > 0) {
@@ -22,19 +25,19 @@ export default function KPIDetails({ kpiCode, count, details, onChange }: KPIDet
       return;
     }
 
-    // Si on a moins de détails que nécessaire, en créer des vides
+    // Si on a moins de détails que nécessaire, CONSERVER les existants et en créer des vides
     if (details.length < count) {
-      const newDetails = [...details];
+      const newDetails = [...details]; // ✅ CONSERVE les détails existants
       for (let i = details.length; i < count; i++) {
         newDetails.push(createEmptyDetail());
       }
       onChange(newDetails);
     }
-    // Si on a trop de détails, supprimer les derniers
+    // Si on a trop de détails, CONSERVER les premiers et supprimer les derniers
     else if (details.length > count) {
-      onChange(details.slice(0, count));
+      onChange(details.slice(0, count)); // ✅ CONSERVE les N premiers
     }
-  }, [count]);
+  }, [count, details.length]); // Ajout de details.length pour détecter les changements
 
   const createEmptyDetail = () => {
     const id = generateId();
