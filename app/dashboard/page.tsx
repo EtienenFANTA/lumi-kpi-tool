@@ -137,7 +137,7 @@ export default function Dashboard() {
     const appels = updatedSaisies.find((s) => s.kpi === 'appels')?.valeur;
     const rdvPris = updatedSaisies.find((s) => s.kpi === 'rdv_pris')?.valeur;
 
-    if (appels !== null && rdvPris !== null && appels > 0) {
+    if (appels !== null && appels !== undefined && rdvPris !== null && rdvPris !== undefined && appels > 0) {
       const conversion = Math.round((rdvPris / appels) * 100);
       const conversionSaisie = updatedSaisies.find((s) => s.kpi === 'conversion');
       if (conversionSaisie) {

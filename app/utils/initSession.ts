@@ -36,12 +36,14 @@ export async function initSession(): Promise<boolean> {
 /**
  * Hook React pour initialiser automatiquement la session
  * Utiliser dans le layout principal de l'application
+ *
+ * Note: Non utilisé actuellement, l'initialisation se fait directement dans layout.tsx
  */
-export function useInitSession() {
+/* export function useInitSession() {
   if (typeof window === 'undefined') return; // SSR guard
 
   // Initialiser au montage du composant
   React.useEffect(() => {
     initSession();
   }, []);
-}
+} */
