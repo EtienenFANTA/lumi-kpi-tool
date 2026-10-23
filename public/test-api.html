@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test API Routes - LUMI KPI</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-weight: 600;
+        }
+        .status.success { background: #d1fae5; color: #065f46; }
+        .status.error { background: #fee2e2; color: #991b1b; }
+        .status.info { background: #dbeafe; color: #1e40af; }
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1d4ed8;
+        }
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+        .test-section {
+            margin: 30px 0;
+            padding: 20px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+        }
+        .test-section h2 {
+            margin-top: 0;
+            color: #1f2937;
+        }
+        pre {
+            background: #1f2937;
+            color: #f3f4f6;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 14px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        .badge.secure { background: #d1fae5; color: #065f46; }
+        .badge.insecure { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Test API Routes - LUMI KPI</h1>
+        <p>Page de test pour vérifier la sécurité et le fonctionnement des API routes Next.js</p>
+
+        <div id="sessionStatus" class="status info">
+            ⏳ Session non initialisée
+        </div>
+
+        <!-- TEST 1 : Sans session -->
+        <div class="test-section">
+            <h2>Test 1 : Appel sans session <span class="badge insecure">DOIT ÉCHOUER</span></h2>
+            <p>Ce test doit retourner <strong>401 Unauthorized</strong> car aucune session n'est active.</p>
+            <button onclick="testSansSession()">🚫 Tester sans session</button>
+            <pre id="result1">Aucun test effectué</pre>
+        </div>
+
+        <!-- TEST 2 : Initialiser session -->
+        <div class="test-section">
+            <h2>Test 2 : Initialiser la session <span class="badge secure">REQUIS</span></h2>
+            <p>Crée un cookie de session HttpOnly valide 30 jours.</p>
+            <button onclick="initSession()">🔐 Initialiser la session</button>
+            <pre id="result2">Aucun test effectué</pre>
+        </div>
+
+        <!-- TEST 3 : Lire avec session -->
+        <div class="test-section">
+            <h2>Test 3 : Lire une semaine avec session <span class="badge secure">DOIT RÉUSSIR</span></h2>
+            <p>Appelle /api/lire-semaine avec le cookie de session.</p>
+            <button id="btnLire" onclick="testLireAvecSession()" disabled>📖 Lire semaine S43 Pierre</button>
+            <pre id="result3">Initialise d'abord la session (Test 2)</pre>
+        </div>
+
+        <!-- TEST 4 : Enregistrer avec session -->
+        <div class="test-section">
+            <h2>Test 4 : Enregistrer une semaine avec session <span class="badge secure">DOIT RÉUSSIR</span></h2>
+            <p>Appelle /api/enregistrer-semaine avec le cookie de session.</p>
+            <button id="btnEnregistrer" onclick="testEnregistrerAvecSession()" disabled>💾 Enregistrer semaine S48 Pierre</button>
+            <pre id="result4">Initialise d'abord la session (Test 2)</pre>
+        </div>
+
+        <!-- Résumé -->
+        <div class="test-section" style="background: #f9fafb;">
+            <h2>✅ Critères de validation</h2>
+            <ul>
+                <li>Test 1 : Doit retourner <code>401 Unauthorized</code></li>
+                <li>Test 2 : Doit retourner <code>200 OK</code> et créer le cookie</li>
+                <li>Test 3 : Doit retourner <code>200 OK</code> avec les données KPI</li>
+                <li>Test 4 : Doit retourner <code>200 OK</code> avec confirmation d'enregistrement</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        let sessionInitialized = false;
+
+        function updateSessionStatus(message, type = 'info') {
+            const statusEl = document.getElementById('sessionStatus');
+            statusEl.className = `status ${type}`;
+            statusEl.textContent = message;
+        }
+
+        function updateResult(id, data, success = true) {
+            const el = document.getElementById(id);
+            el.textContent = JSON.stringify(data, null, 2);
+            el.style.borderLeft = success ? '4px solid #10b981' : '4px solid #ef4444';
+        }
+
+        async function testSansSession() {
+            updateResult('result1', '⏳ Envoi de la requête...', true);
+
+            try {
+                const response = await fetch('/api/lire-semaine', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    // PAS de credentials: 'include' → pas de cookie envoyé
+                    body: JSON.stringify({
+                        annee: 2026,
+                        semaine: 43,
+                        personne: 'Pierre',
+                        env: 'test'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.status === 401) {
+                    updateResult('result1', {
+                        '✅ TEST RÉUSSI': 'Requête bloquée comme attendu',
+                        status: response.status,
+                        statusText: response.statusText,
+                        reponse: data
+                    }, true);
+                } else {
+                    updateResult('result1', {
+                        '❌ TEST ÉCHOUÉ': 'La requête devrait être bloquée !',
+                        status: response.status,
+                        reponse: data
+                    }, false);
+                }
+            } catch (error) {
+                updateResult('result1', { '❌ ERREUR': error.message }, false);
+            }
+        }
+
+        async function initSession() {
+            updateResult('result2', '⏳ Initialisation de la session...', true);
+
+            try {
+                const response = await fetch('/api/init-session', {
+                    method: 'POST',
+                    credentials: 'include' // Important : permet de recevoir le cookie
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    sessionInitialized = true;
+                    updateSessionStatus('✅ Session active (cookie créé)', 'success');
+
+                    // Activer les boutons des tests 3 et 4
+                    document.getElementById('btnLire').disabled = false;
+                    document.getElementById('btnEnregistrer').disabled = false;
+                    document.getElementById('result3').textContent = 'Session active, vous pouvez maintenant tester';
+                    document.getElementById('result4').textContent = 'Session active, vous pouvez maintenant tester';
+
+                    updateResult('result2', {
+                        '✅ TEST RÉUSSI': 'Session initialisée',
+                        status: response.status,
+                        reponse: data,
+                        cookie: '🍪 Cookie HttpOnly créé (visible dans DevTools → Application → Cookies)'
+                    }, true);
+                } else {
+                    updateResult('result2', {
+                        '❌ TEST ÉCHOUÉ': 'Impossible de créer la session',
+                        status: response.status,
+                        reponse: data
+                    }, false);
+                }
+            } catch (error) {
+                updateResult('result2', { '❌ ERREUR': error.message }, false);
+            }
+        }
+
+        async function testLireAvecSession() {
+            updateResult('result3', '⏳ Lecture de la semaine S43...', true);
+
+            try {
+                const response = await fetch('/api/lire-semaine', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include', // Envoie le cookie de session
+                    body: JSON.stringify({
+                        annee: 2026,
+                        semaine: 43,
+                        personne: 'Pierre',
+                        env: 'test'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    updateResult('result3', {
+                        '✅ TEST RÉUSSI': 'Données récupérées avec succès',
+                        status: response.status,
+                        hasSaisie: data.hasSaisie,
+                        nbObjectifs: Object.keys(data.objectifs || {}).length,
+                        saisie: data.saisie,
+                        objectifs: data.objectifs
+                    }, true);
+                } else {
+                    updateResult('result3', {
+                        '❌ TEST ÉCHOUÉ': response.status === 401 ? 'Session invalide' : 'Erreur serveur',
+                        status: response.status,
+                        reponse: data
+                    }, false);
+                }
+            } catch (error) {
+                updateResult('result3', { '❌ ERREUR': error.message }, false);
+            }
+        }
+
+        async function testEnregistrerAvecSession() {
+            updateResult('result4', '⏳ Enregistrement de la semaine S48...', true);
+
+            try {
+                const response = await fetch('/api/enregistrer-semaine', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        annee: 2026,
+                        semaine: 48,
+                        personne: 'Pierre',
+                        env: 'test',
+                        modifie_par: 'Pierre (test page)',
+                        appels: 300,
+                        rdv_pris: 15,
+                        commentaire_general: 'Test depuis la page de test'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    updateResult('result4', {
+                        '✅ TEST RÉUSSI': 'Semaine enregistrée avec succès',
+                        status: response.status,
+                        reponse: data
+                    }, true);
+                } else {
+                    updateResult('result4', {
+                        '❌ TEST ÉCHOUÉ': response.status === 401 ? 'Session invalide' : 'Erreur serveur',
+                        status: response.status,
+                        reponse: data
+                    }, false);
+                }
+            } catch (error) {
+                updateResult('result4', { '❌ ERREUR': error.message }, false);
+            }
+        }
+
+        // Message de bienvenue
+        console.log('%c🧪 Page de test LUMI KPI', 'font-size: 20px; font-weight: bold; color: #2563eb;');
+        console.log('%cUtilise les boutons ci-dessus pour tester les API routes', 'font-size: 14px; color: #6b7280;');
+        console.log('%cOu exécute testSansSession(), initSession(), testLireAvecSession(), testEnregistrerAvecSession()', 'font-size: 12px; color: #9ca3af;');
+    </script>
+</body>
+</html>
