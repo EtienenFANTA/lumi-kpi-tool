@@ -7,6 +7,9 @@ import WeekSelector from '../components/WeekSelector';
 import { KPI_LIST, DEFAULT_OBJECTIFS, Saisie, KPICode } from '../types/kpi';
 import { getCurrentWeek } from '../utils/weekCalculator';
 
+// Désactiver le pré-rendu statique car on utilise useSearchParams
+export const dynamic = 'force-dynamic';
+
 export default function Dashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
