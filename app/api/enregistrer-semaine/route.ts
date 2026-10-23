@@ -83,8 +83,36 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify(kpiData),
     });
 
-    // Récupérer la réponse de N8N
-    const data = await response.json();
+    // Récupérer le texte de la réponse
+    const responseText = await response.text();
+
+    // Vérifier si la réponse est vide
+    if (!responseText || responseText.trim() === '') {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Réponse vide de N8N',
+          message: 'Le webhook N8N a retourné une réponse vide'
+        },
+        { status: 502 }
+      );
+    }
+
+    // Parser le JSON
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Erreur parsing JSON N8N:', responseText);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Format de réponse invalide',
+          message: 'Le webhook N8N a retourné une réponse non-JSON'
+        },
+        { status: 502 }
+      );
+    }
 
     // Vérifier si N8N a retourné une erreur
     if (!response.ok) {
