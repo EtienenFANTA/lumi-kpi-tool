@@ -214,7 +214,7 @@ function DashboardContent() {
           // Filtrer les détails pour ne garder que ceux qui ont au moins un champ rempli
           const detailsNonVides = details[kpiCode].filter(detail => {
             const { id, ...fields } = detail;
-            return Object.values(fields).some(value => value && value.trim() !== '');
+            return Object.values(fields).some(value => typeof value === 'string' && value.trim() !== '');
           });
 
           if (detailsNonVides.length > 0) {
