@@ -74,7 +74,7 @@ export const DEFAULT_OBJECTIFS: Objectif[] = [
   { personne: 'Pierre', kpi: 'ref', valeur: 3 },
 
   // Laura
-  { personne: 'Laura', kpi: 'appels', valeur: 150 },
+  { personne: 'Laura', kpi: 'appels', valeur: 120 },
   { personne: 'Laura', kpi: 'rdv_pris', valeur: 4 },
   { personne: 'Laura', kpi: 'conversion', valeur: 8 },
   { personne: 'Laura', kpi: 'rdv_faits', valeur: 4 },
@@ -86,16 +86,16 @@ export const DEFAULT_OBJECTIFS: Objectif[] = [
   { personne: 'Laura', kpi: 'prospection', valeur: 10 },
   { personne: 'Laura', kpi: 'ref', valeur: 3 },
 
-  // Etienne (mêmes objectifs que Pierre)
-  { personne: 'Etienne', kpi: 'appels', valeur: 100 },
+  // Etienne
+  { personne: 'Etienne', kpi: 'appels', valeur: 50 },
   { personne: 'Etienne', kpi: 'rdv_pris', valeur: 4 },
   { personne: 'Etienne', kpi: 'conversion', valeur: 8 },
   { personne: 'Etienne', kpi: 'rdv_faits', valeur: 4 },
-  { personne: 'Etienne', kpi: 'prez', valeur: 1 },
+  { personne: 'Etienne', kpi: 'prez', valeur: 0 },
   { personne: 'Etienne', kpi: 'rdv_df', valeur: 1 },
-  { personne: 'Etienne', kpi: 'besoins', valeur: 2 },
-  { personne: 'Etienne', kpi: 'candidats', valeur: 25 },
-  { personne: 'Etienne', kpi: 'cv_envoyes', valeur: 15 },
+  { personne: 'Etienne', kpi: 'besoins', valeur: 1 },
+  { personne: 'Etienne', kpi: 'candidats', valeur: 10 },
+  { personne: 'Etienne', kpi: 'cv_envoyes', valeur: 5 },
   { personne: 'Etienne', kpi: 'prospection', valeur: 10 },
-  { personne: 'Etienne', kpi: 'ref', valeur: 3 },
+  { personne: 'Etienne', kpi: 'ref', valeur: 2 },
 ];
