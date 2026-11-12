@@ -176,7 +176,7 @@ function DashboardContent() {
           annee: year,
           semaine: week,
           personne: profile,
-          env: 'test' // TODO: changer en 'prod' pour la production
+          env: 'prod' // ✅ PRODUCTION activée
         })
       });
 
@@ -324,7 +324,7 @@ function DashboardContent() {
         annee: currentWeek.year,
         semaine: currentWeek.week,
         personne: profileName,
-        env: 'test',
+        env: 'prod',
         modifie_par: profileName,
       };
 
