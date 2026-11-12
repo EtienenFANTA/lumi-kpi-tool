@@ -17,12 +17,10 @@ export default function KPIDetails({ kpiCode, count, details, onChange }: KPIDet
     // Ne rien faire si déjà à la bonne taille (évite les boucles infinies)
     if (details.length === count) return;
 
+    // ✅ CORRECTION DU BUG : Ne jamais vider les détails quand count = 0
+    // On les garde en mémoire, mais on ne les affiche pas (voir ligne 210)
     if (count === 0) {
-      // Si count = 0, vider les détails
-      if (details.length > 0) {
-        onChange([]);
-      }
-      return;
+      return; // Ne rien faire, garder les détails existants
     }
 
     // Si on a moins de détails que nécessaire, CONSERVER les existants et en créer des vides

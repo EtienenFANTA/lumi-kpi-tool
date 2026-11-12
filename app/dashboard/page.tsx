@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import KPICard from '../components/KPICard';
 import WeekSelector from '../components/WeekSelector';
@@ -14,6 +14,15 @@ function DashboardContent() {
   const [saisies, setSaisies] = useState<Saisie[]>([]);
   const [details, setDetails] = useState<Record<string, any[]>>({});
   const [currentWeek, setCurrentWeek] = useState({ year: 2026, week: 43 });
+
+  // ===== AUTO-SAVE N8N (T-053) =====
+  const hasUnsavedChanges = useRef(false); // Flag pour détecter les changements
+  const autoSaveTimer = useRef<NodeJS.Timeout | null>(null); // Timer 5 minutes
+
+  // ===== INDICATEUR DE STATUT (T-054) =====
+  type SaveStatus = 'idle' | 'draft' | 'saving' | 'saved' | 'error';
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
   useEffect(() => {
     const savedProfile = localStorage.getItem('selectedProfile');
@@ -42,9 +51,123 @@ function DashboardContent() {
     loadWeekData(savedProfile, targetWeek.year, targetWeek.week);
   }, [router, searchParams]);
 
+  // ===== AUTO-SAVE N8N : beforeunload et cleanup (T-053) =====
+  useEffect(() => {
+    const handleBeforeUnload = async (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges.current) {
+        // Sauvegarder avant de quitter
+        console.log('🚪 Sauvegarde avant fermeture...');
+        await saveToN8N(true);
+
+        // Empêcher la fermeture immédiate (le navigateur affichera une confirmation)
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+
+    // Ajouter l'event listener
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Cleanup à la destruction du composant
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+
+      // Nettoyer le timer
+      if (autoSaveTimer.current) {
+        clearTimeout(autoSaveTimer.current);
+      }
+    };
+  }, [profileName, currentWeek, saisies, details]); // Dépendances pour que saveToN8N ait les bonnes valeurs
+
+  // ===== RAFRAÎCHIR LE BADGE "il y a X min" (T-054) =====
+  useEffect(() => {
+    if (saveStatus === 'saved' && lastSavedAt) {
+      const interval = setInterval(() => {
+        // Forcer un re-render pour mettre à jour le texte "il y a X min"
+        setLastSavedAt(new Date(lastSavedAt));
+      }, 60000); // Toutes les minutes
+
+      return () => clearInterval(interval);
+    }
+  }, [saveStatus, lastSavedAt]);
+
+  // ===== FONCTIONS DE GESTION DU LOCALSTORAGE (T-052) =====
+
+  /**
+   * Génère la clé unique pour le localStorage
+   * Format : draft_Pierre_2026_S43
+   */
+  const getDraftKey = (profile: string, year: number, week: number): string => {
+    return `draft_${profile}_${year}_S${week}`;
+  };
+
+  /**
+   * Sauvegarde le brouillon dans localStorage
+   */
+  const saveDraftToLocalStorage = (saisiesData: Saisie[], detailsData: Record<string, any[]>) => {
+    try {
+      const key = getDraftKey(profileName, currentWeek.year, currentWeek.week);
+      const draft = {
+        saisies: saisiesData,
+        details: detailsData,
+        savedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(key, JSON.stringify(draft));
+      console.log('💾 Brouillon sauvegardé localement:', key);
+
+      // 🎨 Mettre à jour le statut visuel (T-054)
+      setSaveStatus('draft');
+    } catch (error) {
+      console.error('Erreur sauvegarde localStorage:', error);
+    }
+  };
+
+  /**
+   * Charge le brouillon depuis localStorage
+   * Retourne null si pas de brouillon
+   */
+  const loadDraftFromLocalStorage = (profile: string, year: number, week: number) => {
+    try {
+      const key = getDraftKey(profile, year, week);
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const draft = JSON.parse(stored);
+        console.log('📂 Brouillon chargé depuis localStorage:', key, draft.savedAt);
+        return draft;
+      }
+    } catch (error) {
+      console.error('Erreur chargement localStorage:', error);
+    }
+    return null;
+  };
+
+  /**
+   * Supprime le brouillon après sauvegarde réussie vers N8N
+   */
+  const clearDraftFromLocalStorage = () => {
+    try {
+      const key = getDraftKey(profileName, currentWeek.year, currentWeek.week);
+      localStorage.removeItem(key);
+      console.log('🗑️ Brouillon supprimé après sauvegarde N8N:', key);
+    } catch (error) {
+      console.error('Erreur suppression localStorage:', error);
+    }
+  };
+
+  // ===== FIN FONCTIONS LOCALSTORAGE =====
+
   const loadWeekData = async (profile: string, year: number, week: number) => {
     try {
-      // Appeler l'API pour lire les données de la semaine
+      // 📂 PRIORITÉ 1 : Charger le brouillon localStorage s'il existe (T-052)
+      const draft = loadDraftFromLocalStorage(profile, year, week);
+      if (draft) {
+        console.log('✅ Brouillon local trouvé, chargement...');
+        setSaisies(draft.saisies);
+        setDetails(draft.details || {});
+        return; // On s'arrête ici, le brouillon local est prioritaire
+      }
+
+      // 📡 PRIORITÉ 2 : Charger depuis N8N si pas de brouillon local
       const response = await fetch('/api/lire-semaine', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -154,13 +277,28 @@ function DashboardContent() {
     }
 
     setSaisies(updatedSaisies);
+
+    // 💾 SAUVEGARDE LOCALE INSTANTANÉE (T-052)
+    saveDraftToLocalStorage(updatedSaisies, details);
+
+    // 🔄 MARQUER COMME MODIFIÉ et relancer le timer (T-053)
+    hasUnsavedChanges.current = true;
+    startAutoSaveTimer();
   };
 
   const handleDetailsChange = (kpiCode: KPICode, newDetails: any[]) => {
-    setDetails({
+    const updatedDetails = {
       ...details,
       [kpiCode]: newDetails,
-    });
+    };
+    setDetails(updatedDetails);
+
+    // 💾 SAUVEGARDE LOCALE INSTANTANÉE (T-052)
+    saveDraftToLocalStorage(saisies, updatedDetails);
+
+    // 🔄 MARQUER COMME MODIFIÉ et relancer le timer (T-053)
+    hasUnsavedChanges.current = true;
+    startAutoSaveTimer();
   };
 
   const getObjectif = (kpiCode: KPICode): number | null => {
@@ -170,19 +308,15 @@ function DashboardContent() {
     return objectif?.valeur ?? null;
   };
 
-  const handleSave = async () => {
-    // Validation : Vérifier que TOUS les KPI avec objectif sont remplis
-    const kpisObligatoires = KPI_LIST.filter(kpi => kpi.hasObjectif && !kpi.calcule);
-    const kpisManquants = kpisObligatoires.filter(kpi => {
-      const saisie = saisies.find(s => s.kpi === kpi.code);
-      return saisie?.valeur === null || saisie?.valeur === undefined;
-    });
+  // ===== AUTO-SAVE N8N (T-053) =====
 
-    if (kpisManquants.length > 0) {
-      const listeManquants = kpisManquants.map(kpi => `• ${kpi.libelle}`).join('\n');
-      alert(`❌ Veuillez remplir TOUS les KPI avant d'enregistrer :\n\n${listeManquants}\n\nTous les champs doivent être remplis pour valider votre semaine.`);
-      return;
-    }
+  /**
+   * Sauvegarde vers N8N sans redirection (pour auto-save)
+   * Retourne true si succès, false sinon
+   */
+  const saveToN8N = async (silent: boolean = false): Promise<boolean> => {
+    // 🎨 Mettre à jour le statut visuel (T-054)
+    setSaveStatus('saving');
 
     try {
       // Construire les données au format API
@@ -190,7 +324,7 @@ function DashboardContent() {
         annee: currentWeek.year,
         semaine: currentWeek.week,
         personne: profileName,
-        env: 'test', // TODO: changer en 'prod' pour la production
+        env: 'test',
         modifie_par: profileName,
       };
 
@@ -199,7 +333,7 @@ function DashboardContent() {
         kpiData[saisie.kpi] = saisie.valeur;
       });
 
-      // Ajouter les détails en JSON (uniquement pour les KPI qui en ont besoin ET qui ont une valeur > 0)
+      // Ajouter les détails en JSON
       const kpisAvecDetails = ['rdv_pris', 'rdv_faits', 'rdv_df', 'prez', 'ref', 'besoins', 'signatures'];
       const detailsFiltres: Record<string, any[]> = {};
 
@@ -207,11 +341,7 @@ function DashboardContent() {
         const saisieKpi = saisies.find(s => s.kpi === kpiCode);
         const valeur = saisieKpi?.valeur ?? 0;
 
-        // Ne garder les détails QUE si :
-        // 1. Le KPI a une valeur > 0
-        // 2. Il y a des détails non vides (au moins un champ rempli)
         if (valeur > 0 && details[kpiCode] && details[kpiCode].length > 0) {
-          // Filtrer les détails pour ne garder que ceux qui ont au moins un champ rempli
           const detailsNonVides = details[kpiCode].filter(detail => {
             const { id, ...fields } = detail;
             return Object.values(fields).some(value => typeof value === 'string' && value.trim() !== '');
@@ -227,7 +357,7 @@ function DashboardContent() {
         kpiData.details_json = JSON.stringify(detailsFiltres);
       }
 
-      // Appeler l'API pour enregistrer
+      // Appeler l'API
       const response = await fetch('/api/enregistrer-semaine', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -238,17 +368,135 @@ function DashboardContent() {
       const data = await response.json();
 
       if (response.ok && data.success) {
-        // Succès : rediriger vers la page de visualisation
-        router.push('/visualisation');
+        // Succès : nettoyer le brouillon et marquer comme sauvegardé
+        clearDraftFromLocalStorage();
+        hasUnsavedChanges.current = false;
+
+        // 🎨 Mettre à jour le statut visuel (T-054)
+        setSaveStatus('saved');
+        setLastSavedAt(new Date());
+
+        if (!silent) {
+          console.log('✅ Sauvegarde N8N réussie');
+        }
+        return true;
       } else {
-        // Erreur
-        alert('❌ Erreur lors de l\'enregistrement : ' + (data.message || 'Erreur inconnue'));
-        console.error('Erreur API:', data);
+        // 🎨 Mettre à jour le statut visuel (T-054)
+        setSaveStatus('error');
+
+        if (!silent) {
+          console.error('❌ Erreur sauvegarde N8N:', data.message);
+        }
+        return false;
       }
     } catch (error) {
-      console.error('Erreur enregistrement:', error);
-      alert('❌ Erreur réseau lors de l\'enregistrement');
+      // 🎨 Mettre à jour le statut visuel (T-054)
+      setSaveStatus('error');
+
+      if (!silent) {
+        console.error('❌ Erreur réseau sauvegarde N8N:', error);
+      }
+      return false;
     }
+  };
+
+  /**
+   * Lance le timer d'auto-save (5 minutes)
+   */
+  const startAutoSaveTimer = () => {
+    // Annuler le timer précédent s'il existe
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+    }
+
+    // Lancer un nouveau timer de 5 minutes
+    autoSaveTimer.current = setTimeout(async () => {
+      if (hasUnsavedChanges.current) {
+        console.log('⏰ Auto-save 5 min : sauvegarde en cours...');
+        await saveToN8N(true);
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+  };
+
+  // ===== FIN AUTO-SAVE N8N =====
+
+  const handleSave = async () => {
+    // ⚠️ VALIDATION NON BLOQUANTE (T-055)
+    // Vérifier si des KPI sont manquants, mais NE PAS bloquer l'enregistrement
+    const kpisObligatoires = KPI_LIST.filter(kpi => kpi.hasObjectif && !kpi.calcule);
+    const kpisManquants = kpisObligatoires.filter(kpi => {
+      const saisie = saisies.find(s => s.kpi === kpi.code);
+      return saisie?.valeur === null || saisie?.valeur === undefined;
+    });
+
+    if (kpisManquants.length > 0) {
+      // Avertissement NON bloquant : demander confirmation
+      const listeManquants = kpisManquants.map(kpi => `• ${kpi.libelle}`).join('\n');
+      const confirmer = confirm(
+        `⚠️ Attention : ${kpisManquants.length} KPI manquant(s) :\n\n${listeManquants}\n\nVoulez-vous enregistrer quand même ?`
+      );
+
+      if (!confirmer) {
+        return; // L'utilisateur annule
+      }
+    }
+
+    // Sauvegarder vers N8N (même si incomplet)
+    const success = await saveToN8N(false);
+
+    if (success) {
+      // Succès : rediriger vers la page de visualisation
+      router.push('/visualisation');
+    } else {
+      // Erreur
+      alert('❌ Erreur lors de l\'enregistrement. Vos données sont sauvegardées localement.');
+    }
+  };
+
+  // ===== COMPOSANT BADGE DE STATUT (T-054) =====
+  const SaveStatusBadge = () => {
+    const getTimeAgo = (date: Date): string => {
+      const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+      if (seconds < 60) return 'il y a quelques secondes';
+      const minutes = Math.floor(seconds / 60);
+      if (minutes === 1) return 'il y a 1 minute';
+      if (minutes < 60) return `il y a ${minutes} minutes`;
+      const hours = Math.floor(minutes / 60);
+      if (hours === 1) return 'il y a 1 heure';
+      return `il y a ${hours} heures`;
+    };
+
+    const badges = {
+      idle: null,
+      draft: (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-sm">
+          <span className="text-base">💾</span>
+          <span>Brouillon sauvegardé</span>
+        </div>
+      ),
+      saving: (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-100 text-blue-700 rounded-full text-sm animate-pulse">
+          <span className="text-base">⏳</span>
+          <span>Enregistrement en cours...</span>
+        </div>
+      ),
+      saved: (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-sm">
+          <span className="text-base">✅</span>
+          <span>
+            Enregistré {lastSavedAt ? getTimeAgo(lastSavedAt) : ''}
+          </span>
+        </div>
+      ),
+      error: (
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-red-100 text-red-700 rounded-full text-sm">
+          <span className="text-base">❌</span>
+          <span>Erreur - données en local</span>
+        </div>
+      ),
+    };
+
+    return badges[saveStatus];
   };
 
   return (
@@ -264,12 +512,16 @@ function DashboardContent() {
                 </h1>
                 <p className="text-gray-600 mt-1">{profileName}</p>
               </div>
-              <button
-                onClick={handleChangeProfile}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-              >
-                Changer de profil
-              </button>
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                {/* Badge de statut de sauvegarde (T-054) */}
+                <SaveStatusBadge />
+                <button
+                  onClick={handleChangeProfile}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Changer de profil
+                </button>
+              </div>
             </div>
 
             {/* Sélecteur de semaine */}
