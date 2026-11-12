@@ -176,7 +176,7 @@ function DashboardContent() {
           annee: year,
           semaine: week,
           personne: profile,
-          env: 'prod' // ✅ PRODUCTION activée
+          env: 'test' // ⚠️ MODE TEST pour retrouver l'historique
         })
       });
 
@@ -324,7 +324,7 @@ function DashboardContent() {
         annee: currentWeek.year,
         semaine: currentWeek.week,
         personne: profileName,
-        env: 'prod',
+        env: 'test',
         modifie_par: profileName,
       };
 
